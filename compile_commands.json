@@ -1,0 +1,19 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-c",
+      "-Wall",
+      "-Wextra",
+      "-pedantic",
+      "-ggdb",
+      "-Iinclude",
+      "-o",
+      "6502",
+      "src/main.c"
+    ],
+    "directory": "/home/lencone/Code/c/6502",
+    "file": "/home/lencone/Code/c/6502/src/main.c",
+    "output": "/home/lencone/Code/c/6502/6502"
+  }
+]
