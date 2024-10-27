@@ -5,15 +5,20 @@
 #include "mem.h"
 
 // http://www.6502.org/users/obelisk/6502/reference.html#LDA
-#define LDA_IM  0xA9 // Load Accumulator Immediate                  // 2 cycles
-#define LDA_ZP  0xA5 // Load Accumulator (from) Zero Page           // 3 cycles
-#define LDA_ZPX 0xB5 // Load Acuumulatro (from) Zero Page (+) X     // 4 cycles
+#define LDA_IMM 0xA9 //  // 2 bytes // 2 cycles
+#define LDA_ZPG 0xA5 //  // 2 bytes // 3 cycles
+#define LDA_ZPX 0xB5 //  // 2 bytes // 4 cycles
+#define LDA_ABS 0xAD //  // 3 bytes // 4 cycles
+#define LDA_ABX 0xBD //  // 3 bytes // (4|5) cycles
+#define LDA_ABY 0xB9 //  // 3 bytes // (4|5) cycles
+#define LDA_IDX 0xA1 //  // 2 bytes // 6 cycles
+#define LDA_IDY 0xB1 //  // 2 bytes // (5|6) cycles
 // http://www.6502.org/users/obelisk/6502/reference.html#LDX
-#define LDX_IM 0xA2 // Load Accumulator Immediate                   // 2 cycles
-#define LDX_ZP 0xA6 // Load Accumulator (from) Zero Page            // 3 cycles
+#define LDX_IMM 0xA2 //  // 2 bytes // 2 cycles
+#define LDX_ZPG 0xA6 //  // 2 bytes // 3 cycles
 
 // http://www.6502.org/users/obelisk/6502/reference.html#JSR
-#define JSR 0x20 // Jump to Subroutine                              // 6 cycles
+#define JSR 0x20 // Jump to Subroutine // 3 bytes // 6 cycles
 
 typedef struct {
     WORD pc; // Program counter
