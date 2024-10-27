@@ -126,7 +126,7 @@ static void _6502_ld(_6502 *cpu, Mem *mem, uint32_t *cycles, LDIns instruction, 
         }
 
         case LD_IDX: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDX
-            expect(reg != &cpu->x, "Cannot apply instruction to register X.");
+            expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
             BYTE addr = _6502_fetchb(cpu, mem, cycles);
             expect(*cycles > 0, "Not enough cycles to complete instruction.");
             (*cycles)--;
@@ -137,7 +137,7 @@ static void _6502_ld(_6502 *cpu, Mem *mem, uint32_t *cycles, LDIns instruction, 
         }
 
         case LD_IDY: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDY
-            expect(reg != &cpu->y, "Cannot apply instruction to register Y.");
+            expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
             WORD addr = _6502_fetchb(cpu, mem, cycles);
             addr = memldw(mem, cycles, addr);
             expect(*cycles > 0, "Not enough cycles to complete instruction.");

@@ -176,12 +176,12 @@ int main(void)
                    regnames[i]);
             _6502_reset(&cpu, &mem);
             cpu.y = 0xFF;
-            mem.data[cpu.pc] = LDA_ABY;
+            mem.data[cpu.pc] = ins[i];
             mem.data[cpu.pc + 1] = 0x50;
             mem.data[cpu.pc + 2] = 0x20;
             mem.data[0x214F] = 0x7C;
             _6502_exec(&cpu, &mem, 5);
-            ASSERT_EQ(cpu.a, 0x7C);
+            ASSERT_EQ(*reg[i], 0x7C);
         }
     }
 
