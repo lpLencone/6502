@@ -16,7 +16,9 @@
 // http://www.6502.org/users/obelisk/6502/reference.html#LDX
 #define LDX_IMM 0xA2 //  // 2 bytes // 2 cycles
 #define LDX_ZPG 0xA6 //  // 2 bytes // 3 cycles
-
+// http://www.6502.org/users/obelisk/6502/reference.html#LDY
+#define LDY_IMM 0xA0 //  // 2 bytes // 2 cycles
+#define LDY_ZPG 0xA4 //  // 2 bytes // 3 cycles
 // http://www.6502.org/users/obelisk/6502/reference.html#JSR
 #define JSR 0x20 // Jump to Subroutine // 3 bytes // 6 cycles
 

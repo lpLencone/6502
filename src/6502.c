@@ -51,6 +51,9 @@ static uint16_t const insmap[0x100] = {
 
     [LDX_IMM] = LD_IMM, //
     [LDX_ZPG] = LD_ZPG, //
+
+    [LDY_IMM] = LD_IMM, //
+    [LDY_ZPG] = LD_ZPG, //
 };
 
 static void _6502_ld(_6502 *cpu, Mem *mem, uint32_t *cycles, LDIns instruction, BYTE *reg)
@@ -114,6 +117,7 @@ static void _6502_ld(_6502 *cpu, Mem *mem, uint32_t *cycles, LDIns instruction, 
             *reg = memldb(mem, cycles, addr);
             break;
         }
+
         default:
             assert(0);
     }
@@ -140,6 +144,11 @@ void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles)
             case LDX_IMM:
             case LDX_ZPG:
                 _6502_ld(cpu, mem, &cycles, insmap[instruction], &cpu->x);
+                continue;
+
+            case LDY_IMM:
+            case LDY_ZPG:
+                _6502_ld(cpu, mem, &cycles, insmap[instruction], &cpu->y);
                 continue;
 
             case JSR: {

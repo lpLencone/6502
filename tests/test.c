@@ -13,6 +13,7 @@ int main(void)
 {
     // Testing memory
     {
+        printf("Testing memory...\n");
         Mem mem = { 0 };
         uint32_t cycles = 6;
         memstw(&mem, &cycles, 0xFFFE, 0x1234);
@@ -32,6 +33,7 @@ int main(void)
 
     // Testing 6502 Reset
     {
+        printf("Testing 6502 reset...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -43,25 +45,41 @@ int main(void)
     {
         Mem mem;
         _6502 cpu;
-        _6502_reset(&cpu, &mem);
 
-        mem.data[cpu.pc] = LDA_IMM;
-        mem.data[cpu.pc + 1] = 0xFF;
-        _6502_exec(&cpu, &mem, 2);
-        ASSERT_EQ(cpu.a, 0xFF);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
+        uint16_t const ins[3] = { LDA_IMM, LDX_IMM, LDY_IMM };
+        char const *const msg[] = { "Accumulator", "Index Register X", "Index Register Y" };
+        BYTE *const reg[3] = {&cpu.a, &cpu.x, &cpu.y};
 
-        mem.data[cpu.pc] = LDX_IMM;
-        mem.data[cpu.pc + 1] = 0x0;
-        _6502_exec(&cpu, &mem, 2);
-        ASSERT_EQ(cpu.x, 0x0);
-        ASSERT_UNSET(cpu.n);
-        ASSERT_SET(cpu.z);
+        for (size_t i = 0; i < 3; i++) {
+            printf("Testing Load %s Immediate and flags...\n", msg[i]);
+            _6502_reset(&cpu, &mem);
+
+            mem.data[cpu.pc] = ins[i];
+            mem.data[cpu.pc + 1] = 0x0;
+            _6502_exec(&cpu, &mem, 2);
+            ASSERT_EQ(*reg[i], 0x0);
+            ASSERT_UNSET(cpu.n);
+            ASSERT_SET(cpu.z);
+
+            mem.data[cpu.pc] = ins[i];
+            mem.data[cpu.pc + 1] = 0x7F;
+            _6502_exec(&cpu, &mem, 2);
+            ASSERT_EQ(*reg[i], 0x7F);
+            ASSERT_UNSET(cpu.n);
+            ASSERT_UNSET(cpu.z);
+
+            mem.data[cpu.pc] = ins[i];
+            mem.data[cpu.pc + 1] = 0x80;
+            _6502_exec(&cpu, &mem, 2);
+            ASSERT_EQ(*reg[i], 0x80);
+            ASSERT_SET(cpu.n);
+            ASSERT_UNSET(cpu.z);
+        }
     }
 
     // Testing LD_ZPG
     {
+        printf("Testing Load from Zero Page...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -71,12 +89,11 @@ int main(void)
         mem.data[0x23] = 0x42;
         _6502_exec(&cpu, &mem, 3);
         ASSERT_EQ(cpu.a, 0x42);
-        ASSERT_UNSET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ZPX
     {
+        printf("Testing Load from Zero Page X...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -88,12 +105,11 @@ int main(void)
         mem.data[0x33] = 0xF1;
         _6502_exec(&cpu, &mem, 4);
         ASSERT_EQ(cpu.a, 0xF1);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ABS
     {
+        printf("Testing Load From Absolute Address...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -104,12 +120,12 @@ int main(void)
         mem.data[0xCAFE] = 0xF0;
         _6502_exec(&cpu, &mem, 4);
         ASSERT_EQ(cpu.a, 0xF0);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ABX (page not crossed)
     {
+        printf("Testing Load From Absolute Address X (Page not crossed)...\n");
+        printf("Testing Load From Absolute Address X (Page not crossed)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -121,12 +137,11 @@ int main(void)
         mem.data[0x2010] = 0xF0;
         _6502_exec(&cpu, &mem, 4);
         ASSERT_EQ(cpu.a, 0xF0);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ABX (page crossed)
     {
+        printf("Testing Load From Absolute Address X (Page crossed)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -138,12 +153,11 @@ int main(void)
         mem.data[0x214F] = 0x7C;
         _6502_exec(&cpu, &mem, 5);
         ASSERT_EQ(cpu.a, 0x7C);
-        ASSERT_UNSET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ABY (page not crossed)
     {
+        printf("Testing Load From Absolute Address Y (Page not crossed)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -155,12 +169,11 @@ int main(void)
         mem.data[0x2010] = 0xF0;
         _6502_exec(&cpu, &mem, 4);
         ASSERT_EQ(cpu.a, 0xF0);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_ABY (page crossed)
     {
+        printf("Testing Load From Absolute Address Y (Page crossed)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -172,12 +185,11 @@ int main(void)
         mem.data[0x214F] = 0x7C;
         _6502_exec(&cpu, &mem, 5);
         ASSERT_EQ(cpu.a, 0x7C);
-        ASSERT_UNSET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing LD_IDX
     {
+        printf("Testing Load Indexed Indirect (X)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -191,12 +203,11 @@ int main(void)
         mem.data[0xBABE] = 0x0;
         _6502_exec(&cpu, &mem, 6);
         ASSERT_EQ(cpu.a, 0x0);
-        ASSERT_UNSET(cpu.n);
-        ASSERT_SET(cpu.z);
     }
 
     // Testing LD_IDY
     {
+        printf("Testing Load Indirect Indexed (Y)...\n");
         Mem mem;
         _6502 cpu;
         _6502_reset(&cpu, &mem);
@@ -210,8 +221,6 @@ int main(void)
         mem.data[0xBACE] = 0x80;
         _6502_exec(&cpu, &mem, 6);
         ASSERT_EQ(cpu.a, 0x80);
-        ASSERT_SET(cpu.n);
-        ASSERT_UNSET(cpu.z);
     }
 
     // Testing 6502
