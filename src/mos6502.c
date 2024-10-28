@@ -1,155 +1,252 @@
 #include "mos6502.h"
+#include "lib.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Cycles: 1 (memldb)
 static BYTE mos6502_fetchb(MOS_6502 *cpu, RAM *mem)
 {
     return memldb(mem, cpu->pc++);
 }
 
-// Cycles: 2 (memldw)
 static WORD mos6502_fetchw(MOS_6502 *cpu, RAM *mem)
 {
     return (cpu->pc += 2, memldw(mem, cpu->pc - 2));
 }
 
-// // Cycles: 1 (memstb)
 // static void mos6502_pushb(MOS_6502 *cpu, RAM *mem, uint32_t *cycles, BYTE b)
 // {
 //     cpu->s --, memstw(mem, cpu->s + 1, w);
 // }
 
-// Cycles: 2 (memstw)
 static void mos6502_pushw(MOS_6502 *cpu, RAM *mem, WORD w)
 {
     cpu->s -= 2, memstw(mem, cpu->s + 2, w);
 }
 
 typedef enum {
-    LD_IMM = 0x0100, // Load Immediate
-    LD_ZPG = 0x0101, // Load from Zero Page
-    LD_ZPX = 0x0102, // Load from Zero Page + X
-    LD_ZPY = 0x0103, // Load from Zero Page + Y
-    LD_ABS = 0x0104, // Load from absolute address
-    LD_ABX = 0x0105, // Load from absolute address + X
-    LD_ABY = 0x0106, // Load from absolute address + Y
-    LD_IDX = 0x0107, // Load from address in X
-    LD_IDY = 0x0108, // Load from address in Y
-} LDIns;
+    AddrMode_IMM, // Immediate
+    AddrMode_ZPG, // from Zero Page
+    AddrMode_ZPX, // from Zero Page + X
+    AddrMode_ZPY, // from Zero Page + Y
+    AddrMode_ABS, // from absolute address
+    AddrMode_ABX, // from absolute address + X
+    AddrMode_ABY, // from absolute address + Y
+    AddrMode_IDX, // from address in X
+    AddrMode_IDY, // from address in Y
+} AddrMode;
 
-static uint16_t const insmap[0x100] = {
-    [LDA_IMM] = LD_IMM, //
-    [LDA_ZPG] = LD_ZPG, //
-    [LDA_ZPX] = LD_ZPX, //
-    [LDA_ABS] = LD_ABS, //
-    [LDA_ABX] = LD_ABX, //
-    [LDA_ABY] = LD_ABY, //
-    [LDA_IDX] = LD_IDX, //
-    [LDA_IDY] = LD_IDY, //
+char const *modename(AddrMode mode)
+{
+    switch (mode) {
+        case AddrMode_IMM:
+            return "AddrMode_IMM";
+        case AddrMode_ZPG:
+            return "AddrMode_ZPG";
+        case AddrMode_ZPX:
+            return "AddrMode_ZPX";
+        case AddrMode_ZPY:
+            return "AddrMode_ZPY";
+        case AddrMode_ABS:
+            return "AddrMode_ABS";
+        case AddrMode_ABX:
+            return "AddrMode_ABX";
+        case AddrMode_ABY:
+            return "AddrMode_ABY";
+        case AddrMode_IDX:
+            return "AddrMode_IDX";
+        case AddrMode_IDY:
+            return "AddrMode_IDY";
+        default:
+            return "Unknown AddrMode";
+    }
+}
 
-    [LDX_IMM] = LD_IMM, //
-    [LDX_ZPG] = LD_ZPG, //
-    [LDX_ZPY] = LD_ZPY, //
-    [LDX_ABS] = LD_ABS, //
-    [LDX_ABY] = LD_ABY, //
+static AddrMode const modemap[0x100] = {
+    [LDA_IMM] = AddrMode_IMM, //
+    [LDA_ZPG] = AddrMode_ZPG, //
+    [LDA_ZPX] = AddrMode_ZPX, //
+    [LDA_ABS] = AddrMode_ABS, //
+    [LDA_ABX] = AddrMode_ABX, //
+    [LDA_ABY] = AddrMode_ABY, //
+    [LDA_IDX] = AddrMode_IDX, //
+    [LDA_IDY] = AddrMode_IDY, //
 
-    [LDY_IMM] = LD_IMM, //
-    [LDY_ZPG] = LD_ZPG, //
-    [LDY_ZPX] = LD_ZPX, //
-    [LDY_ABS] = LD_ABS, //
-    [LDY_ABX] = LD_ABX, //
+    [LDX_IMM] = AddrMode_IMM, //
+    [LDX_ZPG] = AddrMode_ZPG, //
+    [LDX_ZPY] = AddrMode_ZPY, //
+    [LDX_ABS] = AddrMode_ABS, //
+    [LDX_ABY] = AddrMode_ABY, //
+
+    [LDY_IMM] = AddrMode_IMM, //
+    [LDY_ZPG] = AddrMode_ZPG, //
+    [LDY_ZPX] = AddrMode_ZPX, //
+    [LDY_ABS] = AddrMode_ABS, //
+    [LDY_ABX] = AddrMode_ABX, //
+
+    [STA_ZPG] = AddrMode_ZPG, //
+    [STA_ZPX] = AddrMode_ZPX, //
+    [STA_ABS] = AddrMode_ABS, //
+    [STA_ABX] = AddrMode_ABX, //
+    [STA_ABY] = AddrMode_ABY, //
+    [STA_IDX] = AddrMode_IDX, //
+    [STA_IDY] = AddrMode_IDY, //
+
+    [STX_ZPG] = AddrMode_ZPG, //
+    [STX_ZPY] = AddrMode_ZPY, //
+    [STX_ABS] = AddrMode_ABS, //
+
+    [STY_ZPG] = AddrMode_ZPG, //
+    [STY_ZPX] = AddrMode_ZPX, //
+    [STY_ABS] = AddrMode_ABS, //
 };
 
-static uint64_t mos6502_ld(MOS_6502 *cpu, RAM *mem, LDIns instruction, BYTE *reg)
+static WORD mos6502_getaddr(MOS_6502 *cpu, RAM *mem, AddrMode mode)
+{
+    switch (mode) {
+        case AddrMode_ZPG: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPG
+            return mos6502_fetchb(cpu, mem);
+
+        case AddrMode_ZPX: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPX
+            return mos6502_fetchb(cpu, mem) + cpu->x;
+
+        case AddrMode_ZPY: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPY
+            return mos6502_fetchb(cpu, mem) + cpu->y;
+
+        case AddrMode_ABS: // http://www.6502.org/users/obelisk/6502/addressing.html#ABS
+            return mos6502_fetchw(cpu, mem);
+
+        case AddrMode_ABX: // http://www.6502.org/users/obelisk/6502/addressing.html#ABX
+        case AddrMode_ABY: // http://www.6502.org/users/obelisk/6502/addressing.html#ABY
+            return mos6502_fetchw(cpu, mem) + ((mode == AddrMode_ABX) ? cpu->x : cpu->y);
+
+        case AddrMode_IDX:
+            return memldw(mem, mos6502_fetchb(cpu, mem) + cpu->x);
+
+        case AddrMode_IDY:
+            return memldw(mem, mos6502_fetchb(cpu, mem)) + cpu->y;
+
+        default:
+            panic("Mode \"%s\" not implemented.", modename(mode));
+    }
+}
+
+static uint64_t mos6502_ld(MOS_6502 *cpu, RAM *mem, AddrMode mode, BYTE *reg)
 {
     uint64_t cycles;
-    switch (instruction) {
-        case LD_IMM: // http://www.6502.org/users/obelisk/6502/addressing.html#IMM
-            *reg = mos6502_fetchb(cpu, mem);
-            defer(cycles = 2);
+    // http://www.6502.org/users/obelisk/6502/addressing.html#IMM
+    if (mode == AddrMode_IMM) {
+        *reg = mos6502_fetchb(cpu, mem);
+        defer(cycles = 2);
+    }
 
-        case LD_ZPG: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPG
-            *reg = mos6502_fetchb(cpu, mem);
-            *reg = memldb(mem, *reg);
+    WORD addr = mos6502_getaddr(cpu, mem, mode);
+    switch (mode) {
+        case AddrMode_ZPG: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPG
+            *reg = memldb(mem, addr);
             defer(cycles = 3);
 
-        case LD_ZPX: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPX
+        case AddrMode_ZPX: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPX
             expect(reg != &cpu->x, "Cannot apply instruction to register X.");
-            *reg = mos6502_fetchb(cpu, mem);
-            *reg += cpu->x;
-            *reg = memldb(mem, *reg);
-            defer(cycles = 4);
-
-        case LD_ZPY: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPY
-            expect(reg == &cpu->x, "Cannot apply instruction but to register X");
-            *reg = mos6502_fetchb(cpu, mem);
-            *reg += cpu->y;
-            *reg = memldb(mem, *reg);
-            defer(cycles = 4);
-
-        case LD_ABS: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABS
-            WORD addr = mos6502_fetchw(cpu, mem);
             *reg = memldb(mem, addr);
             defer(cycles = 4);
-        }
 
-        case LD_ABX: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABX
+        case AddrMode_ZPY: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPY
+            expect(reg == &cpu->x, "Cannot apply instruction but to register X");
+            *reg = memldb(mem, addr);
+            defer(cycles = 4);
+
+        case AddrMode_ABS: // http://www.6502.org/users/obelisk/6502/addressing.html#ABS
+            *reg = memldb(mem, addr);
+            defer(cycles = 4);
+
+        case AddrMode_ABX: // http://www.6502.org/users/obelisk/6502/addressing.html#ABX
             expect(reg != &cpu->x, "Cannot apply instruction to register X.");
-            WORD addr = mos6502_fetchw(cpu, mem);
-            addr += cpu->x;
             *reg = memldb(mem, addr);
             // https://retrocomputing.stackexchange.com/a/146
             if ((addr & 0xFF) < cpu->x) {
                 defer(cycles = 5);
             }
             defer(cycles = 4);
-        }
 
-        case LD_ABY: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABY
+        case AddrMode_ABY: // http://www.6502.org/users/obelisk/6502/addressing.html#ABY
             expect(reg != &cpu->y, "Cannot apply instruction to register Y.");
-            WORD addr = mos6502_fetchw(cpu, mem);
-            addr += cpu->y;
             *reg = memldb(mem, addr);
             // https://retrocomputing.stackexchange.com/a/146
             if ((addr & 0xFF) < cpu->y) {
                 defer(cycles = 5);
             }
             defer(cycles = 4);
-        }
 
-        case LD_IDX: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDX
+        case AddrMode_IDX: // http://www.6502.org/users/obelisk/6502/addressing.html#IDX
             expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
-            BYTE addr = mos6502_fetchb(cpu, mem);
-            addr += cpu->x;
-            addr = memldw(mem, addr);
             *reg = memldb(mem, addr);
             defer(cycles = 6);
-        }
 
-        case LD_IDY: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDY
+        case AddrMode_IDY: // http://www.6502.org/users/obelisk/6502/addressing.html#IDY
             expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
-            WORD addr = mos6502_fetchb(cpu, mem);
-            addr = memldw(mem, addr);
-            addr += cpu->y;
             *reg = memldb(mem, addr);
             // TODO: figure out exactly the reason
             if ((addr & 0xFF) < cpu->y) {
                 defer(cycles = 6);
             }
             defer(cycles = 5);
-        }
 
         default:
-            assert(0);
+            panic("Mode \"%s\" not implemented for Load instructions (LD*)",
+                  modename(mode));
     }
 
 defer:
     cpu->z = *reg == 0x0;
     cpu->n = *reg >> 7;
     return cycles;
+}
+
+static uint64_t mos6502_st(MOS_6502 *cpu, RAM *mem, AddrMode mode, BYTE *reg)
+{
+    WORD addr = mos6502_getaddr(cpu, mem, mode);
+    switch (mode) {
+        case AddrMode_ZPG: {
+            memstb(mem, addr, *reg);
+            return 3;
+        }
+
+        case AddrMode_ZPX: {
+            expect(reg != &cpu->x, "Cannot apply instruction to Register X");
+            memstb(mem, addr, *reg);
+            return 4;
+        }
+
+        case AddrMode_ZPY: {
+            expect(reg == &cpu->x, "Cannot apply instruction but to Register X");
+            memstb(mem, addr, *reg);
+            return 4;
+        }
+
+        case AddrMode_ABS: {
+            memstb(mem, addr, *reg);
+            return 4;
+        }
+
+        case AddrMode_ABX:
+        case AddrMode_ABY: {
+            expect(reg == &cpu->a, "Cannot apply instruction but to Accumulator.");
+            memstb(mem, addr, *reg);
+            return 5;
+        }
+
+        case AddrMode_IDX:
+        case AddrMode_IDY:
+            expect(reg == &cpu->a, "Cannot apply instruction but to Accumulator.");
+            memstb(mem, addr, *reg);
+            return 6;
+
+        default:
+            panic("Mode \"%s\" not implemented for Store instructions (ST*)",
+                  modename(mode));
+    }
 }
 
 uint64_t mos6502_exec(MOS_6502 *cpu, RAM *mem, uint64_t max_cycles)
@@ -166,23 +263,41 @@ uint64_t mos6502_exec(MOS_6502 *cpu, RAM *mem, uint64_t max_cycles)
             case LDA_ABY:
             case LDA_IDX:
             case LDA_IDY:
-                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->a);
+                cycles += mos6502_ld(cpu, mem, modemap[instruction], &cpu->a);
                 continue;
-
             case LDX_IMM:
             case LDX_ZPG:
             case LDX_ZPY:
             case LDX_ABS:
             case LDX_ABY:
-                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->x);
+                cycles += mos6502_ld(cpu, mem, modemap[instruction], &cpu->x);
                 continue;
-
             case LDY_IMM:
             case LDY_ZPG:
             case LDY_ZPX:
             case LDY_ABS:
             case LDY_ABX:
-                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->y);
+                cycles += mos6502_ld(cpu, mem, modemap[instruction], &cpu->y);
+                continue;
+
+            case STA_ZPG:
+            case STA_ZPX:
+            case STA_ABS:
+            case STA_ABX:
+            case STA_ABY:
+            case STA_IDX:
+            case STA_IDY:
+                cycles += mos6502_st(cpu, mem, modemap[instruction], &cpu->a);
+                continue;
+            case STX_ZPG:
+            case STX_ZPY:
+            case STX_ABS:
+                cycles += mos6502_st(cpu, mem, modemap[instruction], &cpu->x);
+                continue;
+            case STY_ZPG:
+            case STY_ZPX:
+            case STY_ABS:
+                cycles += mos6502_st(cpu, mem, modemap[instruction], &cpu->y);
                 continue;
 
             case JSR: {

@@ -5,26 +5,44 @@
 #include "ram.h"
 
 // http://www.6502.org/users/obelisk/6502/reference.html#LDA
-#define LDA_IMM 0xA9 //  // 2 bytes // 2 cycles
-#define LDA_ZPG 0xA5 //  // 2 bytes // 3 cycles
-#define LDA_ZPX 0xB5 //  // 2 bytes // 4 cycles
-#define LDA_ABS 0xAD //  // 3 bytes // 4 cycles
-#define LDA_ABX 0xBD //  // 3 bytes // (4|5) cycles
-#define LDA_ABY 0xB9 //  // 3 bytes // (4|5) cycles
-#define LDA_IDX 0xA1 //  // 2 bytes // 6 cycles
-#define LDA_IDY 0xB1 //  // 2 bytes // (5|6) cycles
+#define LDA_IMM 0xA9 // 2 bytes // 2 cycles
+#define LDA_ZPG 0xA5 // 2 bytes // 3 cycles
+#define LDA_ZPX 0xB5 // 2 bytes // 4 cycles
+#define LDA_ABS 0xAD // 3 bytes // 4 cycles
+#define LDA_ABX 0xBD // 3 bytes // (4|5) cycles
+#define LDA_ABY 0xB9 // 3 bytes // (4|5) cycles
+#define LDA_IDX 0xA1 // 2 bytes // 6 cycles
+#define LDA_IDY 0xB1 // 2 bytes // (5|6) cycles
 // http://www.6502.org/users/obelisk/6502/reference.html#LDX
-#define LDX_IMM 0xA2 //  // 2 bytes // 2 cycles
-#define LDX_ZPG 0xA6 //  // 2 bytes // 3 cycles
-#define LDX_ZPY 0xB6 //  // 2 bytes // 4 cycles
-#define LDX_ABS 0xAE //  // 3 bytes // 4 cycles
-#define LDX_ABY 0xBE //  // 3 bytes // (4|5) cycles
+#define LDX_IMM 0xA2 // 2 bytes // 2 cycles
+#define LDX_ZPG 0xA6 // 2 bytes // 3 cycles
+#define LDX_ZPY 0xB6 // 2 bytes // 4 cycles
+#define LDX_ABS 0xAE // 3 bytes // 4 cycles
+#define LDX_ABY 0xBE // 3 bytes // (4|5) cycles
 // http://www.6502.org/users/obelisk/6502/reference.html#LDY
-#define LDY_IMM 0xA0 //  // 2 bytes // 2 cycles
-#define LDY_ZPG 0xA4 //  // 2 bytes // 3 cycles
-#define LDY_ZPX 0xB4 //  // 2 bytes // 4 cycles
-#define LDY_ABS 0xAC //  // 3 bytes // 4 cycles
-#define LDY_ABX 0xBC //  // 3 bytes // (4|5) cycles
+#define LDY_IMM 0xA0 // 2 bytes // 2 cycles
+#define LDY_ZPG 0xA4 // 2 bytes // 3 cycles
+#define LDY_ZPX 0xB4 // 2 bytes // 4 cycles
+#define LDY_ABS 0xAC // 3 bytes // 4 cycles
+#define LDY_ABX 0xBC // 3 bytes // (4|5) cycles
+
+// http://www.6502.org/users/obelisk/6502/reference.html#STA
+#define STA_ZPG 0x85 // 2 bytes // 3 cycles
+#define STA_ZPX 0x95 // 2 bytes // 4 cycles
+#define STA_ABS 0x8D // 3 bytes // 4 cycles
+#define STA_ABX 0x9D // 3 bytes // 5 cycles
+#define STA_ABY 0x99 // 3 bytes // 5 cycles
+#define STA_IDX 0x81 // 2 bytes // 6 cycles
+#define STA_IDY 0x91 // 2 bytes // 6 cycles
+// http://www.6502.org/users/obelisk/6502/reference.html#STX
+#define STX_ZPG 0x86 // 2 bytes // 3 cycles
+#define STX_ZPY 0x96 // 2 bytes // 4 cycles
+#define STX_ABS 0x8E // 3 bytes // 4 cycles
+// http://www.6502.org/users/obelisk/6502/reference.html#STY
+#define STY_ZPG 0x84 // 2 bytes // 3 cycles
+#define STY_ZPX 0x94 // 2 bytes // 4 cycles
+#define STY_ABS 0x8C // 3 bytes // 4 cycles
+
 // http://www.6502.org/users/obelisk/6502/reference.html#JSR
 #define JSR 0x20 // Jump to Subroutine // 3 bytes // 6 cycles
 
@@ -47,7 +65,6 @@ typedef struct {
     BYTE n : 1; // Negative Flag
     // MSB
 } MOS_6502;
-
 
 uint64_t mos6502_exec(MOS_6502 *cpu, RAM *mem, uint64_t max_cycles);
 void mos6502_reset(MOS_6502 *cpu, RAM *mem);

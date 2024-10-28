@@ -27,4 +27,8 @@ typedef uint16_t WORD;
         goto defer; \
     } while (0)
 
+#define ASSERT_EQ(l, r)   expect((l) == (r), "")
+#define ASSERT_SET(bit)   expect(bit == 0b1, "");
+#define ASSERT_UNSET(bit) expect(bit == 0b0, "");
+
 #endif // _6502_LIB_H_
