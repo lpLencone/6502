@@ -1,31 +1,31 @@
-#include "6502.h"
+#include "mos6502.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // Cycles: 1 (memldb)
-static BYTE _6502_fetchb(_6502 *cpu, Mem *mem, uint32_t *cycles)
+static BYTE mos6502_fetchb(MOS_6502 *cpu, RAM *mem)
 {
-    return memldb(mem, cycles, cpu->pc++);
+    return memldb(mem, cpu->pc++);
 }
 
 // Cycles: 2 (memldw)
-static WORD _6502_fetchw(_6502 *cpu, Mem *mem, uint32_t *cycles)
+static WORD mos6502_fetchw(MOS_6502 *cpu, RAM *mem)
 {
-    return (cpu->pc += 2, memldw(mem, cycles, cpu->pc - 2));
+    return (cpu->pc += 2, memldw(mem, cpu->pc - 2));
 }
 
 // // Cycles: 1 (memstb)
-// static void _6502_pushb(_6502 *cpu, Mem *mem, uint32_t *cycles, BYTE b)
+// static void mos6502_pushb(MOS_6502 *cpu, RAM *mem, uint32_t *cycles, BYTE b)
 // {
-//     memstb(mem, cycles, cpu->s--, b);
+//     cpu->s --, memstw(mem, cpu->s + 1, w);
 // }
 
 // Cycles: 2 (memstw)
-static void _6502_pushw(_6502 *cpu, Mem *mem, uint32_t *cycles, WORD w)
+static void mos6502_pushw(MOS_6502 *cpu, RAM *mem, WORD w)
 {
-    (cpu->s -= 2, memstw(mem, cycles, cpu->s + 2, w));
+    cpu->s -= 2, memstw(mem, cpu->s + 2, w);
 }
 
 typedef enum {
@@ -63,101 +63,100 @@ static uint16_t const insmap[0x100] = {
     [LDY_ABX] = LD_ABX, //
 };
 
-static void _6502_ld(_6502 *cpu, Mem *mem, uint32_t *cycles, LDIns instruction, BYTE *reg)
+static uint64_t mos6502_ld(MOS_6502 *cpu, RAM *mem, LDIns instruction, BYTE *reg)
 {
+    uint64_t cycles;
     switch (instruction) {
         case LD_IMM: // http://www.6502.org/users/obelisk/6502/addressing.html#IMM
-            *reg = _6502_fetchb(cpu, mem, cycles);
-            break;
+            *reg = mos6502_fetchb(cpu, mem);
+            defer(cycles = 2);
 
         case LD_ZPG: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPG
-            *reg = _6502_fetchb(cpu, mem, cycles);
-            *reg = memldb(mem, cycles, *reg);
-            break;
+            *reg = mos6502_fetchb(cpu, mem);
+            *reg = memldb(mem, *reg);
+            defer(cycles = 3);
 
         case LD_ZPX: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPX
             expect(reg != &cpu->x, "Cannot apply instruction to register X.");
-            *reg = _6502_fetchb(cpu, mem, cycles);
-            expect(*cycles > 0, "Not enough cycles to complete instruction.");
-            (*cycles)--;
+            *reg = mos6502_fetchb(cpu, mem);
             *reg += cpu->x;
-            *reg = memldb(mem, cycles, *reg);
-            break;
+            *reg = memldb(mem, *reg);
+            defer(cycles = 4);
 
         case LD_ZPY: // http://www.6502.org/users/obelisk/6502/addressing.html#ZPY
             expect(reg == &cpu->x, "Cannot apply instruction but to register X");
-            *reg = _6502_fetchb(cpu, mem, cycles);
-            expect(*cycles > 0, "Not enough cycles to complete instruction.");
-            (*cycles)--;
+            *reg = mos6502_fetchb(cpu, mem);
             *reg += cpu->y;
-            *reg = memldb(mem, cycles, *reg);
-            break;
+            *reg = memldb(mem, *reg);
+            defer(cycles = 4);
 
         case LD_ABS: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABS
-            WORD addr = _6502_fetchw(cpu, mem, cycles);
-            *reg = memldb(mem, cycles, addr);
-            break;
+            WORD addr = mos6502_fetchw(cpu, mem);
+            *reg = memldb(mem, addr);
+            defer(cycles = 4);
         }
 
         case LD_ABX: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABX
             expect(reg != &cpu->x, "Cannot apply instruction to register X.");
-            WORD addr = _6502_fetchw(cpu, mem, cycles);
-            if (((addr + cpu->x) & 0xFF) < cpu->x) {
-                // https://retrocomputing.stackexchange.com/a/146
-                expect(*cycles > 0, "Not enough cycles to complete instruction.");
-                (*cycles)--;
-            }
+            WORD addr = mos6502_fetchw(cpu, mem);
             addr += cpu->x;
-            *reg = memldb(mem, cycles, addr);
-            break;
+            *reg = memldb(mem, addr);
+            // https://retrocomputing.stackexchange.com/a/146
+            if ((addr & 0xFF) < cpu->x) {
+                defer(cycles = 5);
+            }
+            defer(cycles = 4);
         }
 
         case LD_ABY: { // http://www.6502.org/users/obelisk/6502/addressing.html#ABY
             expect(reg != &cpu->y, "Cannot apply instruction to register Y.");
-            WORD addr = _6502_fetchw(cpu, mem, cycles);
-            if (((addr + cpu->y) & 0xFF) < cpu->y) {
-                // https://retrocomputing.stackexchange.com/a/146
-                expect(*cycles > 0, "Not enough cycles to complete instruction.");
-                (*cycles)--;
-            }
+            WORD addr = mos6502_fetchw(cpu, mem);
             addr += cpu->y;
-            *reg = memldb(mem, cycles, addr);
-            break;
+            *reg = memldb(mem, addr);
+            // https://retrocomputing.stackexchange.com/a/146
+            if ((addr & 0xFF) < cpu->y) {
+                defer(cycles = 5);
+            }
+            defer(cycles = 4);
         }
 
         case LD_IDX: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDX
             expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
-            BYTE addr = _6502_fetchb(cpu, mem, cycles);
-            expect(*cycles > 0, "Not enough cycles to complete instruction.");
-            (*cycles)--;
+            BYTE addr = mos6502_fetchb(cpu, mem);
             addr += cpu->x;
-            addr = memldw(mem, cycles, addr);
-            *reg = memldb(mem, cycles, addr);
-            break;
+            addr = memldw(mem, addr);
+            *reg = memldb(mem, addr);
+            defer(cycles = 6);
         }
 
         case LD_IDY: { // http://www.6502.org/users/obelisk/6502/addressing.html#IDY
             expect(reg == &cpu->a, "Cannot apply instruction but to register A.");
-            WORD addr = _6502_fetchb(cpu, mem, cycles);
-            addr = memldw(mem, cycles, addr);
-            expect(*cycles > 0, "Not enough cycles to complete instruction.");
-            (*cycles)--;
+            WORD addr = mos6502_fetchb(cpu, mem);
+            addr = memldw(mem, addr);
             addr += cpu->y;
-            *reg = memldb(mem, cycles, addr);
-            break;
+            *reg = memldb(mem, addr);
+            // TODO: figure out exactly the reason
+            if ((addr & 0xFF) < cpu->y) {
+                defer(cycles = 6);
+            }
+            defer(cycles = 5);
         }
 
         default:
             assert(0);
     }
+
+defer:
     cpu->z = *reg == 0x0;
     cpu->n = *reg >> 7;
+    return cycles;
 }
 
-void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles)
+uint64_t mos6502_exec(MOS_6502 *cpu, RAM *mem, uint64_t max_cycles)
 {
-    while (cycles > 0) {
-        BYTE instruction = _6502_fetchb(cpu, mem, &cycles);
+    uint64_t cycles = 0;
+    while (cycles < max_cycles) {
+        BYTE instruction = mos6502_fetchb(cpu, mem);
         switch (instruction) {
             case LDA_IMM:
             case LDA_ZPG:
@@ -167,7 +166,7 @@ void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles)
             case LDA_ABY:
             case LDA_IDX:
             case LDA_IDY:
-                _6502_ld(cpu, mem, &cycles, insmap[instruction], &cpu->a);
+                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->a);
                 continue;
 
             case LDX_IMM:
@@ -175,7 +174,7 @@ void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles)
             case LDX_ZPY:
             case LDX_ABS:
             case LDX_ABY:
-                _6502_ld(cpu, mem, &cycles, insmap[instruction], &cpu->x);
+                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->x);
                 continue;
 
             case LDY_IMM:
@@ -183,28 +182,28 @@ void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles)
             case LDY_ZPX:
             case LDY_ABS:
             case LDY_ABX:
-                _6502_ld(cpu, mem, &cycles, insmap[instruction], &cpu->y);
+                cycles += mos6502_ld(cpu, mem, insmap[instruction], &cpu->y);
                 continue;
 
             case JSR: {
-                WORD subroutine_addr = _6502_fetchw(cpu, mem, &cycles);
-                _6502_pushw(cpu, mem, &cycles, cpu->pc - 1);
-                expect(cycles > 0, "Not enough cycles to complete instruction.");
-                cycles--;
+                WORD subroutine_addr = mos6502_fetchw(cpu, mem);
+                mos6502_pushw(cpu, mem, cpu->pc - 1);
                 cpu->pc = subroutine_addr;
+                cycles += 6;
                 continue;
             }
         }
 
         panic("Instruction not handled: 0x%x\n", instruction);
     }
+    return cycles;
 }
 
-void _6502_reset(_6502 *cpu, Mem *mem)
+void mos6502_reset(MOS_6502 *cpu, RAM *mem)
 {
     cpu->pc = 0xFFFC;
     cpu->s = 0xFD;
     cpu->c = cpu->z = cpu->i = cpu->d = cpu->b = cpu->o = cpu->n = 0;
     cpu->a = cpu->x = cpu->y = 0;
-    memset(mem->data, 0, MAX_MEM);
+    memset(mem->data, 0, RAM_SIZE);
 }

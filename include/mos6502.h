@@ -1,8 +1,8 @@
-#ifndef _6502_H_
-#define _6502_H_
+#ifndef MOS6502_H_
+#define MOS6502_H_
 
 #include "lib.h"
-#include "mem.h"
+#include "ram.h"
 
 // http://www.6502.org/users/obelisk/6502/reference.html#LDA
 #define LDA_IMM 0xA9 //  // 2 bytes // 2 cycles
@@ -46,9 +46,10 @@ typedef struct {
     BYTE o : 1; // Overflow Flag
     BYTE n : 1; // Negative Flag
     // MSB
-} _6502;
+} MOS_6502;
 
-void _6502_exec(_6502 *cpu, Mem *mem, uint32_t cycles);
-void _6502_reset(_6502 *cpu, Mem *mem);
 
-#endif // _6502_H_
+uint64_t mos6502_exec(MOS_6502 *cpu, RAM *mem, uint64_t max_cycles);
+void mos6502_reset(MOS_6502 *cpu, RAM *mem);
+
+#endif // MOS6502_H_

@@ -21,4 +21,10 @@ typedef uint16_t WORD;
         }                                                                      \
     } while (0)
 
+#define defer(stmt) \
+    do {            \
+        stmt;       \
+        goto defer; \
+    } while (0)
+
 #endif // _6502_LIB_H_
